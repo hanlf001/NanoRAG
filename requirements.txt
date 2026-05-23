@@ -1,0 +1,5 @@
+PySide6
+PyMuPDF
+faiss-cpu
+sentence-transformers
+sqlite-utils

@@ -21,9 +21,13 @@ sdist/
 var/
 wheels/
 share/python-wheels/
+data/models/
+.idea/
+.vscode/
 *.egg-info/
 .installed.cfg
 *.egg
+*.db
 MANIFEST
 
 # PyInstaller
@@ -151,6 +155,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.venv/
 env/
 venv/
 ENV/
