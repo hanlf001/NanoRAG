@@ -59,10 +59,11 @@ Package as a standalone .exe with PyInstaller:
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --icon=resources/icons/FC.ico main.py
+pyinstaller --onefile --windowed --icon=resources/icons/FC.ico --name NanoRAG --add-data "qml;qml" --add-data "resources;resources" main.py
 ```
 
-> Output goes to `dist/` directory. 打包后的文件在 `dist/` 目录中。
+> Output goes to `dist/` directory (~420MB, includes all dependencies).
+> 打包后的文件在 `dist/` 目录中（约 420MB，包含所有依赖）。
 
 ## Project Structure / 项目结构
 

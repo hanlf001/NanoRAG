@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.1 (2026-05-23)
+
+### Added / 新增
+
+- **EXE 打包支持**：添加 `resource_path()` 兼容 PyInstaller `sys._MEIPASS` 路径
+- **包初始化文件**：core 和 database 目录添加 `__init__.py` 确保模块发现
+
+### Fixed / 修复
+
+- 修复打包后 QML 和资源文件路径查找问题
+
+---
+
 ## v0.2.0 (2026-05-23)
 
 ### Added / 新增

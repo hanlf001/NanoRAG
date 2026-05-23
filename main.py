@@ -16,6 +16,15 @@ from core.llm_engine import LLMEngine
 from core.ollama_manager import OllamaManager
 
 
+def resource_path(relative_path):
+    """获取资源绝对路径，支持开发模式和 PyInstaller 打包模式"""
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, relative_path)
+
+
 class ChatThread(QThread):
     finished = Signal(str)
     error = Signal(str)
@@ -326,7 +335,7 @@ def main():
 
     app = QApplication(sys.argv)
 
-    icon_path = os.path.join(os.path.dirname(__file__), "resources", "icons", "FC.ico")
+    icon_path = resource_path("resources/icons/FC.ico")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
@@ -336,7 +345,7 @@ def main():
     engine.rootContext().setContextProperty("nanoRAGBackend", backend)
     atexit.register(backend.cleanup)
 
-    qml_file = os.path.join(os.path.dirname(__file__), "qml", "Main.qml")
+    qml_file = resource_path("qml/Main.qml")
     engine.load(qml_file)
 
     if not engine.rootObjects():
