@@ -9,6 +9,8 @@ Dialog {
     width: 420
     height: 350
     parent: ApplicationWindow.overlay
+    x: (parent.width - width) / 2
+    y: (parent.height - height) / 2
 
     background: Rectangle {
         color: "#1E1F22"
