@@ -1,132 +1,108 @@
 # NanoRAG
 
-一个轻量级的本地 AI 知识库桌面应用，支持多种文档格式，提供向量搜索和基于本地 LLM 的对话功能。
+A lightweight local AI knowledge base desktop app with multi-format document support, vector search, and local LLM-powered chat.
 
-## ✨ 功能特性
+> 一个轻量级的本地 AI 知识库桌面应用，支持多种文档格式，提供向量搜索和基于本地 LLM 的对话功能。
 
-- 📄 **多种文档格式支持**：PDF、Word、Excel、PowerPoint、TXT、Markdown
-- 🔍 **智能向量搜索**：基于 FAISS 的快速语义检索
-- 🤖 **本地 LLM 集成**：通过 Ollama 使用本地大语言模型
-- 💬 **上下文对话**：基于检索文档的智能问答
-- 💾 **本地数据存储**：数据全部保存在本地，保护隐私
-- 🚀 **降级模式**：没有 Ollama 也能用文档搜索功能
+## Features / 功能特性
 
-## 📦 快速开始
+- 📄 **Multi-format support / 多格式支持**：PDF, Word, Excel, PowerPoint, TXT, Markdown
+- 🔍 **Smart search / 智能搜索**：FAISS-based fast semantic retrieval
+- 🤖 **Local LLM / 本地模型**：Ollama integration for offline AI chat
+- 💬 **Contextual Q&A / 上下文问答**：RAG-based document Q&A
+- 💾 **Local storage / 本地存储**：All data stored locally, privacy-first
+- 🚀 **Fallback mode / 降级模式**：Document search works even without Ollama
 
-### 方法一：一键启动（推荐）
+## Quick Start / 快速开始
 
-Windows 用户直接双击 `启动.bat` 即可！
-
-### 方法二：手动安装
-
-#### 1. 环境要求
+### 1. Requirements / 环境要求
 
 - Python 3.8+
-- Ollama (可选，用于 AI 对话功能)
+- Ollama (optional / 可选，用于 AI 对话)
 
-#### 2. 安装 Python 依赖
+### 2. Install dependencies / 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-#### 3. （可选）安装和配置 Ollama
+### 3. Install Ollama / 安装 Ollama（可选）
 
-1. 从 [Ollama 官网](https://ollama.ai) 下载并安装 Ollama
-2. 启动 Ollama 服务
-3. 下载一个模型（例如 llama3）：
+1. Download from [Ollama](https://ollama.ai) and install
+2. Start the Ollama service
+3. Pull a model (e.g., llama3):
 
 ```bash
 ollama pull llama3
 ```
 
-> 💡 **提示**：没有安装 Ollama 也能用！应用会自动进入降级模式，提供文档搜索功能
+> 💡 **Tip / 提示**：The app works without Ollama in fallback mode for document search.
+> 没有 Ollama 也能用，应用会自动进入降级模式，提供文档搜索功能。
 
-## 🚀 使用方法
-
-### 启动应用
+## Usage / 使用方法
 
 ```bash
-# 方式一：使用启动脚本
-启动.bat
-
-# 方式二：手动启动
 python main.py
 ```
 
-### 基本操作
+1. **Import documents / 导入文档**：Click "导入文档" in the sidebar to upload files
+2. **Start chatting / 开始对话**：Type questions in the chat area, AI answers based on imported docs
+3. **Manage documents / 管理文档**：View and delete documents in the sidebar list
 
-1. **导入文档**：点击左侧栏的「导入文档」按钮，选择要导入的文档
-2. **开始对话**：在右侧聊天区域输入问题，AI 会基于已导入的文档回答
-3. **管理文档**：可以在文档列表中查看和删除已导入的文档
+## Build / 打包
 
-## 📦 打包成 .exe
-
-如果你想把应用打包给其他用户使用：
+Package as a standalone .exe with PyInstaller:
 
 ```bash
-# 安装 PyInstaller
 pip install pyinstaller
-
-# 打包成单文件
-python build.py build
-
-# 或创建便携版
-python build.py portable
+pyinstaller --onefile --windowed main.py
 ```
 
-打包后的文件在 `dist/` 目录中。
+> Output goes to `dist/` directory. 打包后的文件在 `dist/` 目录中。
 
-## 📁 项目结构
+## Project Structure / 项目结构
 
 ```
 NanoRAG/
-├── main.py                    # 应用入口
-├── 启动.bat                   # Windows 一键启动脚本
-├── build.py                   # 打包脚本
-├── requirements.txt           # Python 依赖
+├── main.py                    # App entry / 应用入口
+├── requirements.txt           # Python dependencies
 ├── core/
-│   ├── document_manager.py    # 文档管理器
-│   ├── llm_engine.py          # LLM 引擎（支持降级模式）
-│   ├── pdf_parser.py          # 文档解析器
-│   └── vector_search.py       # 向量搜索
+│   ├── document_manager.py    # Document manager / 文档管理器
+│   ├── llm_engine.py          # LLM engine (with fallback) / LLM 引擎（含降级）
+│   ├── pdf_parser.py          # Document parser / 文档解析器
+│   └── vector_search.py       # Vector search / 向量搜索
 ├── database/
-│   └── database.py            # 数据库模块
+│   └── database.py            # Database module / 数据库模块
 └── qml/
-    ├── Main.qml               # 主界面
-    └── components/            # QML 组件
-        ├── Sidebar.qml
-        ├── ChatView.qml
-        └── ...
+    ├── Main.qml               # Main UI with chat / 主界面（含聊天区域）
+    └── components/
+        ├── Sidebar.qml        # Sidebar (import & list) / 侧边栏
+        ├── SearchBox.qml      # Search box / 搜索框
+        └── TopBar.qml         # Top bar / 顶栏
 ```
 
-## 🛠️ 技术栈
+## Tech Stack / 技术栈
 
-- **UI 框架**：PySide6 (Qt Quick/QML)
-- **向量搜索**：FAISS + sentence-transformers
-- **文档解析**：PyMuPDF, python-docx, openpyxl, python-pptx
-- **数据库**：SQLite + sqlite-utils
-- **LLM 集成**：Ollama
+- **UI**：PySide6 (Qt Quick/QML)
+- **Vector Search / 向量搜索**：FAISS + sentence-transformers
+- **Parsing / 文档解析**：PyMuPDF, python-docx, openpyxl, python-pptx
+- **Database / 数据库**：SQLite + sqlite-utils
+- **LLM**：Ollama
 
-## 💡 常见问题
+## FAQ / 常见问题
 
-### Q: 没有安装 Ollama 可以用吗？
+**Q: Can I use it without Ollama? / 没有 Ollama 能用吗？**
 
-A: 可以！应用会自动进入降级模式，你仍然可以：
-- 导入和管理文档
-- 使用向量搜索功能
-- 查看相关文档片段
+A: Yes. The app enters fallback mode — you can still import docs, use search, and view relevant snippets. Only AI summarization is unavailable.
 
-只是没有 AI 对话总结功能。
+**Q: First run is slow? / 第一次运行很慢？**
 
-### Q: sentence-transformers 第一次运行很慢？
+A: It downloads models (~80MB) on first run, cached afterward. 第一次运行会下载模型约 80MB，之后会缓存。
 
-A: 第一次运行时会下载模型（约 80MB），下载后会缓存，以后就快了。
+**Q: Large .exe size? / 打包的 exe 很大？**
 
-### Q: 打包后的 .exe 很大？
+A: Normal — PySide6 and AI libraries result in 100-200MB single-file builds.
 
-A: PySide6 和 AI 库比较大，单文件版本可能 100-200MB，这是正常的。
+## License / 许可证
 
-## 📄 许可证
-
-MIT License
+MIT
