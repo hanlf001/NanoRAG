@@ -3,3 +3,7 @@ PyMuPDF
 faiss-cpu
 sentence-transformers
 sqlite-utils
+python-docx
+openpyxl
+python-pptx
+requests

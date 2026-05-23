@@ -25,6 +25,23 @@ share/python-wheels/
 data/models/
 .idea/
 .vscode/
+.trae/
+.claude/
+
+# Models
+models/
+
+# App generated files
+nano_rag.docs
+nano_rag.index
+
+# Helper scripts
+*.bat
+download_models.py
+build.py
+
+# Test files
+test_*.py
 *.egg-info/
 .installed.cfg
 *.egg
