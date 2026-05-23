@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 
 Dialog {
     id: dialog
@@ -10,11 +9,6 @@ Dialog {
     width: 420
     height: 350
     parent: ApplicationWindow.overlay
-
-    onOpened: {
-        x = (Screen.width - width) / 2
-        y = (Screen.height - height) / 2
-    }
 
     background: Rectangle {
         color: "#1E1F22"
