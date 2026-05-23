@@ -2,6 +2,8 @@ import numpy as np
 import faiss
 import pickle
 import os
+import io
+from contextlib import redirect_stderr, redirect_stdout
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Tuple, Optional
 
@@ -10,22 +12,29 @@ class VectorSearch:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         local_model_path = os.path.join(project_dir, "models")
-        
+
         if os.path.exists(local_model_path) and any(
-            f.endswith('.safetensors') or f == 'model.safetensors' 
+            f.endswith('.safetensors') or f == 'model.safetensors'
             for f in os.listdir(local_model_path)
         ):
-            print(f"使用本地模型: {local_model_path}")
-            self.model = SentenceTransformer(local_model_path)
+            self._model_path = local_model_path
         else:
-            print(f"使用默认模型: {model_name}")
-            self.model = SentenceTransformer(model_name)
-        
+            self._model_path = model_name
+
+        self.model = None
         self.index = None
         self.documents = []
         self.embedding_dim = None
 
+    def _ensure_model(self):
+        if self.model is not None:
+            return
+        print(f"加载向量模型: {self._model_path}")
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.model = SentenceTransformer(self._model_path)
+
     def _get_embeddings(self, texts: List[str]) -> np.ndarray:
+        self._ensure_model()
         embeddings = self.model.encode(texts, convert_to_numpy=True)
         return embeddings.astype('float32')
 
@@ -35,8 +44,9 @@ class VectorSearch:
         embeddings = self._get_embeddings(texts)
         self.embedding_dim = embeddings.shape[1]
 
-        self.index = faiss.IndexFlatL2(self.embedding_dim)
-        self.index.add(embeddings)
+        self.index = faiss.IndexIDMap(faiss.IndexFlatL2(self.embedding_dim))
+        ids = np.array([doc['chunk_id'] for doc in documents], dtype=np.int64)
+        self.index.add_with_ids(embeddings, ids)
 
     def search(self, query: str, top_k: int = 5) -> List[Tuple[Dict[str, str], float]]:
         if self.index is None or len(self.documents) == 0:
@@ -48,8 +58,12 @@ class VectorSearch:
         results = []
         for i in range(min(top_k, len(indices[0]))):
             idx = indices[0][i]
-            if idx < len(self.documents):
-                results.append((self.documents[idx], float(distances[0][i])))
+            if idx < 0:
+                continue
+            for doc in self.documents:
+                if doc['chunk_id'] == idx:
+                    results.append((doc, float(distances[0][i])))
+                    break
 
         return results
 
@@ -76,9 +90,21 @@ class VectorSearch:
         self.documents.extend(documents)
         texts = [doc['content'] for doc in documents]
         embeddings = self._get_embeddings(texts)
-        self.index.add(embeddings)
+        ids = np.array([doc['chunk_id'] for doc in documents], dtype=np.int64)
+        self.index.add_with_ids(embeddings, ids)
+
+    def remove_by_chunk_ids(self, chunk_ids: List[int]) -> None:
+        if self.index is None:
+            return
+        ids_set = set(chunk_ids)
+        self.index.remove_ids(np.array(chunk_ids, dtype=np.int64))
+        self.documents = [d for d in self.documents if d['chunk_id'] not in ids_set]
 
     def clear_index(self) -> None:
         self.index = None
         self.documents = []
         self.embedding_dim = None
+
+    @property
+    def document_count(self) -> int:
+        return len(self.documents)

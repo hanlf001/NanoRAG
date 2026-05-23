@@ -1,6 +1,7 @@
 import atexit
 import sys
 import os
+import ctypes
 
 os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "300"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -9,8 +10,10 @@ os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtCore import QObject, Signal, Slot, QThread, Property
+from PySide6.QtGui import QIcon
 from core.document_manager import DocumentManager
 from core.llm_engine import LLMEngine
+from core.ollama_manager import OllamaManager
 
 
 class ChatThread(QThread):
@@ -46,46 +49,71 @@ class ChatThread(QThread):
 
 
 class NanoRAGBackend(QObject):
-    messageAdded = Signal()
     chatResponseChunk = Signal(str)
     chatResponseFinished = Signal(str)
     chatError = Signal(str)
     documentListChanged = Signal()
     conversationListChanged = Signal()
+    conversationLoaded = Signal(list)
+    errorOccurred = Signal(str)
+    modelChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.document_manager = DocumentManager()
         self.llm_engine = LLMEngine()
+        self.ollama_manager = OllamaManager()
         self._current_conversation_id = None
         self._active_threads = []
+        self._current_thread = None
+        self._model_list = []
 
         self._load_documents()
         self._load_conversations()
+        self._load_models()
 
         if self.llm_engine.is_available():
             print(f"LLM 可用 | 模型: {self.llm_engine.model}")
         else:
             print("LLM 不可用，使用降级模式")
-    
+
     def _load_documents(self):
         self._documents = self.document_manager.get_document_list()
-    
+
     def _load_conversations(self):
         self._conversations = self.llm_engine.get_all_conversations()
-    
+
+    def _load_models(self):
+        self._model_list = self.llm_engine.list_models()
+
+    # ---- Properties ----
+
     @Property(list, notify=documentListChanged)
     def documents(self):
         return self._documents
-    
+
     @Property(list, notify=conversationListChanged)
     def conversations(self):
         return self._conversations
-    
+
     @Property(int, notify=conversationListChanged)
     def currentConversationId(self):
         return self._current_conversation_id if self._current_conversation_id else -1
-    
+
+    @Property(str, notify=modelChanged)
+    def currentModel(self):
+        return self.llm_engine.model
+
+    @Property(list, notify=modelChanged)
+    def modelList(self):
+        return self._model_list
+
+    @Property(QObject, constant=True)
+    def ollamaManager(self):
+        return self.ollama_manager
+
+    # ---- Document slots ----
+
     @Slot(str, result=bool)
     def uploadDocument(self, file_path):
         try:
@@ -96,9 +124,11 @@ class NanoRAGBackend(QObject):
             self.documentListChanged.emit()
             return True
         except Exception as e:
-            print(f"上传文档失败: {e}")
+            msg = f"上传文档失败: {e}"
+            print(msg)
+            self.errorOccurred.emit(msg)
             return False
-    
+
     @Slot(int, result=bool)
     def deleteDocument(self, doc_id):
         try:
@@ -108,25 +138,30 @@ class NanoRAGBackend(QObject):
                 self.documentListChanged.emit()
             return success
         except Exception as e:
-            print(f"删除文档失败: {e}")
+            msg = f"删除文档失败: {e}"
+            print(msg)
+            self.errorOccurred.emit(msg)
             return False
-    
+
+    # ---- Chat slots ----
+
     @Slot(str, result=bool)
     def sendMessage(self, message):
         try:
             if self._current_conversation_id is None:
-                conv_id = self.llm_engine.create_conversation(title=message[:50])
+                title = message[:30] + ("..." if len(message) > 30 else "")
+                conv_id = self.llm_engine.create_conversation(title=title)
                 self._current_conversation_id = conv_id
                 self._load_conversations()
                 self.conversationListChanged.emit()
-            
+
             self.llm_engine.db.create_message(
                 self._current_conversation_id,
                 "user",
                 message
             )
             context_docs = self.document_manager.search_documents(message, top_k=5)
-            
+
             thread = ChatThread(
                 self.llm_engine,
                 message,
@@ -138,54 +173,99 @@ class NanoRAGBackend(QObject):
             thread.error.connect(self._on_chat_error)
             thread.finished.connect(thread.deleteLater)
             self._active_threads.append(thread)
+            self._current_thread = thread
             thread.start()
-            
+
             return True
         except Exception as e:
-            print(f"发送消息失败: {e}")
-            self.chatError.emit(str(e))
+            msg = f"发送消息失败: {e}"
+            print(msg)
+            self.chatError.emit(msg)
             return False
-    
+
     def _on_chat_chunk(self, chunk):
         self.chatResponseChunk.emit(chunk)
-    
+
     def _on_chat_finished(self, response):
-        if response and self._current_conversation_id is not None:
-            self.llm_engine.db.create_message(
-                self._current_conversation_id,
-                "assistant",
-                response
-            )
+        if self._current_conversation_id is not None:
+            if response:
+                self.llm_engine.db.create_message(
+                    self._current_conversation_id,
+                    "assistant",
+                    response
+                )
+            self._load_conversations()
+            self.conversationListChanged.emit()
         self.chatResponseFinished.emit("")
-        self.messageAdded.emit()
-    
+
     def _on_chat_error(self, error):
         self.chatError.emit(error)
-    
-    @Slot(int, result=bool)
+        self.errorOccurred.emit(f"对话错误: {error}")
+
+    @Slot(result=bool)
+    def stopGeneration(self):
+        try:
+            thread = self._current_thread
+            if thread and thread.isRunning():
+                partial = getattr(thread, '_full_response', '')
+                try:
+                    thread.chunk.disconnect(self._on_chat_chunk)
+                    thread.finished.disconnect(self._on_chat_finished)
+                    thread.error.disconnect(self._on_chat_error)
+                except Exception:
+                    pass
+                thread.stop()
+                self._active_threads.remove(thread)
+                self._current_thread = None
+                if partial and self._current_conversation_id:
+                    self.llm_engine.db.create_message(
+                        self._current_conversation_id,
+                        "assistant",
+                        partial
+                    )
+                    self._load_conversations()
+                    self.conversationListChanged.emit()
+                self.chatResponseFinished.emit("")
+                return True
+        except Exception as e:
+            print(f"停止生成失败: {e}")
+        return False
+
+    # ---- Conversation slots ----
+
+    @Slot(int, result=list)
     def selectConversation(self, conv_id):
         try:
             self._current_conversation_id = conv_id
+            messages = self.llm_engine.db.get_messages_by_conversation(conv_id)
+            result = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in messages
+            ]
+            self.conversationLoaded.emit(result)
             self.conversationListChanged.emit()
-            self.messageAdded.emit()
-            return True
+            return result
         except Exception as e:
-            print(f"选择对话失败: {e}")
-            return False
-    
-    @Slot(result=bool)
+            msg = f"切换对话失败: {e}"
+            print(msg)
+            self.errorOccurred.emit(msg)
+            return []
+
+    @Slot(result=list)
     def newConversation(self):
         try:
             conv_id = self.llm_engine.create_conversation()
             self._current_conversation_id = conv_id
             self._load_conversations()
             self.conversationListChanged.emit()
-            self.messageAdded.emit()
-            return True
+            self.conversationLoaded.emit([])
+            return []
         except Exception as e:
-            print(f"创建对话失败: {e}")
-            return False
-    
+            msg = f"创建对话失败: {e}"
+            print(msg)
+            self.errorOccurred.emit(msg)
+            return []
+
     @Slot(int, result=bool)
     def deleteConversation(self, conv_id):
         try:
@@ -195,41 +275,60 @@ class NanoRAGBackend(QObject):
                     self._current_conversation_id = None
                 self._load_conversations()
                 self.conversationListChanged.emit()
-                self.messageAdded.emit()
+                if self._current_conversation_id is None:
+                    self.conversationLoaded.emit([])
             return success
         except Exception as e:
-            print(f"删除对话失败: {e}")
+            msg = f"删除对话失败: {e}"
+            print(msg)
+            self.errorOccurred.emit(msg)
             return False
-    
-    @Slot(int, result=list)
-    def getConversationMessages(self, conv_id):
+
+    # ---- Model slots ----
+
+    @Slot(result=list)
+    def listModels(self):
+        return self.llm_engine.list_models()
+
+    @Slot(str, result=bool)
+    def setModel(self, model_name):
         try:
-            messages = self.llm_engine.db.get_messages_by_conversation(conv_id)
-            return [
-                {"role": msg["role"], "content": msg["content"]}
-                for msg in messages
-            ]
+            self.llm_engine.set_model(model_name)
+            self.modelChanged.emit()
+            self._load_models()
+            return self.llm_engine.is_available()
         except Exception as e:
-            print(f"获取消息失败: {e}")
-            return []
-    
+            print(f"切换模型失败: {e}")
+            return False
+
+    # ---- Search slot ----
+
     @Slot(str, result=list)
     def searchDocuments(self, query):
         try:
-            results = self.document_manager.search_documents(query, top_k=10)
-            return results
+            return self.document_manager.search_documents(query, top_k=10)
         except Exception as e:
             print(f"搜索失败: {e}")
             return []
 
+    # ---- Cleanup ----
+
     def cleanup(self):
+        self.ollama_manager.cleanup()
         for thread in self._active_threads:
             if thread.isRunning():
                 thread.stop()
 
 
 def main():
+    if sys.platform.startswith("win"):
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("hank.NanoRAG.1.0")
+
     app = QApplication(sys.argv)
+
+    icon_path = os.path.join(os.path.dirname(__file__), "resources", "icons", "FC.ico")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     engine = QQmlApplicationEngine()
 

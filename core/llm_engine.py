@@ -88,26 +88,22 @@ class LLMEngine:
 
     def chat(self, query: str, context_docs: List[Dict[str, Any]] = None, conversation_id: Optional[int] = None) -> str:
         if not self.is_available():
-            fallback_response = self._fallback_response(query, context_docs)
-            if conversation_id:
-                self.db.create_message(conversation_id, "user", query)
-                self.db.create_message(conversation_id, "assistant", fallback_response)
-            return fallback_response
-        
+            return self._fallback_response(query, context_docs)
+
         conversation_history = []
-        
+
         if conversation_id:
             messages = self.db.get_messages_by_conversation(conversation_id)
             conversation_history = [
                 {"role": msg["role"], "content": msg["content"]}
                 for msg in messages
             ]
-        
+
         if context_docs is None:
             context_docs = []
-        
+
         messages = self._build_messages(query, context_docs, conversation_history)
-        
+
         try:
             url = f"{self.ollama_url.rstrip('/')}/api/chat"
             payload = {
@@ -115,52 +111,38 @@ class LLMEngine:
                 "messages": messages,
                 "stream": False,
             }
-            
+
             resp = requests.post(url, json=payload, timeout=60)
             resp.raise_for_status()
-            
+
             data = resp.json()
-            answer = data.get("message", {}).get("content", "")
-            
-            if conversation_id:
-                self.db.create_message(conversation_id, "user", query)
-                self.db.create_message(conversation_id, "assistant", answer)
-            
-            return answer
-            
+            return data.get("message", {}).get("content", "")
+
         except Exception as e:
             error_msg = f"发生错误: {str(e)}"
             print(error_msg)
             print(traceback.format_exc())
-            fallback_response = self._fallback_response(query, context_docs)
-            if conversation_id:
-                self.db.create_message(conversation_id, "user", query)
-                self.db.create_message(conversation_id, "assistant", fallback_response)
-            return fallback_response
+            return self._fallback_response(query, context_docs)
 
     def chat_stream(self, query: str, context_docs: List[Dict[str, Any]] = None, conversation_id: Optional[int] = None) -> Generator[str, None, None]:
         if not self.is_available():
-            fallback_response = self._fallback_response(query, context_docs)
-            if conversation_id:
-                self.db.create_message(conversation_id, "user", query)
-                self.db.create_message(conversation_id, "assistant", fallback_response)
-            yield fallback_response
+            yield self._fallback_response(query, context_docs)
             return
-        
+
         conversation_history = []
-        
+
         if conversation_id:
             messages = self.db.get_messages_by_conversation(conversation_id)
             conversation_history = [
                 {"role": msg["role"], "content": msg["content"]}
                 for msg in messages
             ]
-        
+
         if context_docs is None:
             context_docs = []
-        
+
         messages = self._build_messages(query, context_docs, conversation_history)
-        
+
         try:
             full_answer = ""
             url = f"{self.ollama_url.rstrip('/')}/api/chat"
@@ -169,10 +151,10 @@ class LLMEngine:
                 "messages": messages,
                 "stream": True,
             }
-            
+
             with requests.post(url, json=payload, timeout=120, stream=True) as resp:
                 resp.raise_for_status()
-                
+
                 for line in resp.iter_lines():
                     if line:
                         try:
@@ -183,20 +165,12 @@ class LLMEngine:
                                 yield content
                         except json.JSONDecodeError:
                             continue
-            
-            if conversation_id:
-                self.db.create_message(conversation_id, "user", query)
-                self.db.create_message(conversation_id, "assistant", full_answer)
-                
+
         except Exception as e:
             error_msg = f"发生错误: {str(e)}"
             print(error_msg)
             print(traceback.format_exc())
-            fallback_response = self._fallback_response(query, context_docs)
-            if conversation_id:
-                self.db.create_message(conversation_id, "user", query)
-                self.db.create_message(conversation_id, "assistant", fallback_response)
-            yield fallback_response
+            yield self._fallback_response(query, context_docs)
 
     def _fallback_response(self, query: str, context_docs: List[Dict[str, Any]] = None) -> str:
         if not context_docs:
